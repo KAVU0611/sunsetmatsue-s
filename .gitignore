@@ -1,0 +1,23 @@
+# Node
+node_modules
+.pnpm-store
+
+# Next.js
+.next
+out
+.vercel
+
+# Env files
+.env*
+
+# CDK
+cdk.out
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+# Frontend
+frontend/dist

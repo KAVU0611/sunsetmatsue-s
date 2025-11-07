@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: hsl(224 71% 4%);
+  background-color: hsl(210 40% 98%);
+  font-family: "Noto Sans JP", system-ui, sans-serif;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.card-glow {
+  box-shadow: 0px 25px 60px rgba(15, 23, 42, 0.12);
+}

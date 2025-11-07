@@ -1,0 +1,7 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/sunset-forecast.ts",
+  "context": {
+    "@aws-cdk/core:bootstrapQualifier": "sunset",
+    "@aws-cdk/aws-apigateway:usagePlanKeyOrderInsensitiveId": true
+  }
+}

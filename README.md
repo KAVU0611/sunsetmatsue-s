@@ -1,0 +1,180 @@
+# Sunset Forecast (Bedrock Edition)
+
+AWS Bedrock Titan Image Generator v1 で夕景カードを生成し、S3/CloudFront へ自動保存する “本番手前” パイプラインです。React (Vite) フロントエンド → API Gateway → Lambda (Python 3.12) → Bedrock → S3 → CloudFront という経路を CDK(TypeScript) で構築し、Route 53 Hosted Zone 作成と GitHub Actions 自動化まで含めています。
+
+## リポジトリ構成
+
+| パス | 説明 |
+| --- | --- |
+| `frontend/` | Vite + React + Tailwind + shadcn/ui。日付/場所/天候を入力して生成結果をグリッド表示します。|
+| `services/lambda/generate-card/` | Bedrock Titan v1 を呼び出してカード画像を生成し、Pillow でテキストを重ねて S3 に保存します。|
+| `layers/pillow/` | Lambda Layer (Pillow) のビルドスクリプト。manylinux wheel を取得して `pillow-layer.zip` を生成します。|
+| `infra/cdk/` | CDK アプリ。S3(画像), CloudFront(OAC), API Gateway, Lambda, Lambda Layer, IAM、Route 53 Hosted Zone の IaC。|
+| `.github/workflows/*.yml` | `deploy.yml` は CDK synth/diff/deploy、`frontend-build.yml` は Vite ビルド→S3 sync→CloudFront 無効化を実行します。|
+| `Makefile` | `make bootstrap / deploy / destroy` で CDK 操作を共通化します。|
+
+## 事前準備
+
+- Node.js 20 / pnpm 9
+- Python 3.12 (ローカルで layer をビルドする場合)
+- AWS CLI v2 / CDK v2 (`npm i -g aws-cdk`)
+- Bedrock Titan Image Generator v1 へのアクセス権 (us-east-1)
+- Route 53 で委譲できる独自ドメイン (`MY_DOMAIN_NAME`) ※最終レコード追加は手動
+
+## 環境変数とシークレット
+
+| 変数 | 用途 |
+| --- | --- |
+| `MODEL_ID` | 既定は `amazon.titan-image-generator-v1`。必要に応じて差し替え。|
+| `BEDROCK_REGION` | Bedrock 呼び出しリージョン。Titan v1 は us-east-1 を推奨。|
+| `FRONTEND_ORIGIN` | CORS 許可オリジン。`matsuesunsetai.com` を使う場合は `https://matsuesunsetai.com` を指定 (Stack 側で `https://www.matsuesunsetai.com` も自動許可)。未指定なら `https://<MY_DOMAIN_NAME>` が既定。|
+| `MY_DOMAIN_NAME` | Route 53 Hosted Zone を作成するドメイン (例: `example.com`)。|
+| `FRONTEND_DEPLOY_BUCKET` / `FRONTEND_DISTRIBUTION_ID` | GitHub Actions (`frontend-build.yml`) で使用する静的ホスティング先。|
+| `FRONTEND_API_URL` | Vite ビルド時に埋め込む API Gateway の `/generate-card` フル URL。|
+| `DEPLOY_ROLE_ARN` | GitHub Actions から Assume する IAM ロール ARN。|
+
+GitHub Secrets に格納し、必要に応じてワークフローや `pnpm run cdk ...` 実行時にエクスポートしてください。
+
+## セットアップ手順
+
+1. 依存関係をインストール
+   ```bash
+   pnpm install
+   ```
+2. フロントエンドの環境変数雛形をコピー
+   ```bash
+   cp frontend/.env.example frontend/.env
+   # VITE_API_URL=https://xxxxxxxx.execute-api.us-east-1.amazonaws.com/prod/generate-card を設定
+   ```
+3. （任意）Pillow Layer をローカルで事前ビルド
+   ```bash
+   bash layers/pillow/build.sh
+   # dist/pillow-layer.zip が生成されます。CDK Bundling でも自動生成されるため任意です。
+   ```
+4. CDK ブートストラップ & デプロイ
+   ```bash
+   export MODEL_ID=amazon.titan-image-generator-v1
+   export BEDROCK_REGION=us-east-1
+   export FRONTEND_ORIGIN=https://matsuesunsetai.com
+   export MY_DOMAIN_NAME=matsuesunsetai.com
+
+   make bootstrap   # 初回のみ
+   make deploy
+   ```
+   デプロイ完了後、`CloudFrontDomain`, `ImagesBucketName`, `HostedZoneId` などの出力を控えます。
+
+## フロントエンド開発
+
+```bash
+cd frontend
+pnpm dev   # http://localhost:5173
+```
+
+UI ではフォーム送信→生成中スピナー→生成結果グリッド表示を確認できます。`VITE_API_URL` を未設定の場合はエラーアラートが表示されます。
+
+## GitHub Actions
+
+- `.github/workflows/deploy.yml`
+  - 変更検知 (`infra/**`, `services/lambda/**`, `layers/**`) で起動。
+  - `pnpm install` → `cdk synth` → `cdk diff` → `cdk deploy`。
+  - `MODEL_ID / FRONTEND_ORIGIN / MY_DOMAIN_NAME` は Secrets 経由で上書き。
+- `.github/workflows/frontend-build.yml`
+  - `frontend/**` 更新時または手動実行。
+  - `pnpm --filter sunset-forecast-frontend build` → `aws s3 sync frontend/dist ...`。
+  - `FRONTEND_DEPLOY_BUCKET`, `FRONTEND_DISTRIBUTION_ID`, `FRONTEND_API_URL`, `DEPLOY_ROLE_ARN` を Secrets で指定してください。
+
+## Route 53 ドメイン手順
+
+CDK が Hosted Zone / us-east-1 ACM 証明書 / matsuesunsetai.com 用の A・AAAA (ALIAS) / www CNAME をすべて作成します。利用者が行うのは以下のみです。
+1. ドメインレジストラ (Route 53 Domains など) に、出力された `HostedZoneNameServers` を NS レコードとして登録。
+2. 伝播完了後、CloudFront のカスタムドメインに `matsuesunsetai.com` / `www.matsuesunsetai.com` が自動でバインドされていることを確認。
+
+## matsuesunsetai.com 統合クイックスタート
+
+1. ルートディレクトリで環境変数をセット。
+   ```bash
+   export MY_DOMAIN_NAME=matsuesunsetai.com
+   export FRONTEND_ORIGIN=https://matsuesunsetai.com
+   export MODEL_ID=amazon.titan-image-generator-v1
+   export BEDROCK_REGION=us-east-1
+   ```
+2. CDK をデプロイ。
+   ```bash
+   make deploy
+   ```
+   `ApiUrl`, `CloudFrontDomain`, `HostedZoneNameServers` を控え、NS が伝播するまで待ちます。
+3. フロントエンド環境変数を更新。
+   ```bash
+   cd frontend
+   cp .env.example .env  # 未作成の場合
+   echo "VITE_API_URL=<ApiUrlを貼り付け>" > .env
+   pnpm install
+   pnpm build
+   ```
+4. ビルド成果物を既存の静的ホスティング先へ配置 (GitHub Actions でも可)。手動で行う場合は以下を目安にしてください。
+   ```bash
+   export FRONTEND_DEPLOY_BUCKET=<静的ホスティング用S3>
+   export FRONTEND_DISTRIBUTION_ID=<フロントエンド用CloudFront>
+   aws s3 sync frontend/dist s3://$FRONTEND_DEPLOY_BUCKET --delete
+   aws cloudfront create-invalidation --distribution-id $FRONTEND_DISTRIBUTION_ID --paths '/*'
+   ```
+5. ブラウザで `https://matsuesunsetai.com` / `https://www.matsuesunsetai.com` を開き、アプリ→API→Lambda→Bedrock→S3/CloudFront の流れと `images/*` のレスポンスを確認します。
+
+## Lambda / API の挙動
+
+- 環境変数: `MODEL_ID`, `BEDROCK_REGION`, `OUTPUT_BUCKET`, `CLOUDFRONT_DOMAIN`, `ALLOWED_ORIGINS`。
+- CORS: `ALLOWED_ORIGINS` (カンマ区切り) に一致するオリジンのみ許可。未指定時 `*`。
+- ログ: CloudWatch Logs に JSON で `event`, `requestId`, `errorType` などを出力。
+
+### 正常系テスト
+
+1. CDK デプロイ後、Rest API URL (`.../prod/`) を確認。
+2. `curl` で `/generate-card` を叩く:
+   ```bash
+   API=https://xxxxxxxx.execute-api.us-east-1.amazonaws.com/prod/generate-card
+   curl -X POST "$API" \
+     -H 'Content-Type: application/json' \
+     -d '{"location":"Matsue","date":"2025-11-07","style":"sunset poster","conditions":"clear sky"}'
+   ```
+   - 200 応答には `requestId`, `objectKey`, `s3Url`, `cloudFrontUrl` (CloudFront 有効時) が含まれます。
+   - `cloudFrontUrl` をブラウザで開き、OAC 経由で画像が取得できることを確認します。
+3. フロントエンド (`pnpm dev`) から同じデータでリクエストし、生成カードがグリッド表示されることを確認します。
+
+### CloudFront 経由確認
+
+- `cloudFrontUrl` が `https://<distribution>/images/...jpg` であること。
+- 直接 `s3.amazonaws.com` を開くと AccessDenied になる (OAC 強制) こと。
+
+### 失敗ケース再現 & ログ確認
+
+1. **Bedrock モデル未許可**: `MODEL_ID` に許可されていない ID を設定して `make deploy`。`curl` リクエストすると 500 応答 + `errorType: InternalError`。CloudWatch Logs (Lambda グループ) に `request.failed` と `Bedrock invoke failed` が JSON で記録されます。
+2. **S3 権限不足**: 一時的に Lambda IAM の `s3:PutObject` をコメントアウトして `cdk deploy` すると、API は 500 と `Image generation failed` を返します。CloudWatch Logs には `AccessDenied` が出力されます。権限を戻した後に再デプロイしてください。
+
+## Makefile コマンド
+
+```bash
+make bootstrap   # pnpm install + cdk bootstrap
+make deploy      # pnpm install + cdk deploy --require-approval never
+make destroy     # リソース削除 (S3 は RETAIN のため手動削除が必要)
+```
+
+## Pillow Layer
+
+`layers/pillow/build.sh` では以下を実行します。
+1. manylinux2014_x86_64 / Python3.12 用 Pillow wheel をダウンロード。
+2. Lambda 互換ディレクトリ (`python/lib/python3.12/site-packages`) に展開。
+3. `pillow-layer.zip` を出力。
+
+CDK bundling でも同等の処理を行うため、CI では追加作業不要です。
+
+## モニタリングとログ
+
+- API Gateway: `ApiAccessLogs` (JSON) に構造化アクセスログ。
+- Lambda: `request.received / request.completed / request.failed` を JSON 出力。
+- CloudFront: OAC + キャッシュポリシー `CACHING_OPTIMIZED` を利用。Invalidation は GitHub Actions または `aws cloudfront create-invalidation` で実行。
+
+## トラブルシューティング
+
+- `No module named 'PIL'`: Pillow は Lambda Layer によって提供されるため、`layers/pillow/build.sh` が改善済みです。CDK Bundling で自動添付されます。
+- `AccessDenied` (S3): OAC 以外からのアクセスは禁止。CloudFront の Distribution ID を bucket policy に反映するため、必ず CDK を通して管理してください。
+- Hosted Zone の NS 未反映: レジストラ側の NS レコード更新後、最大 48 時間伝播が必要です。伝播完了までは CloudFront カスタムドメインを追加しないでください。
