@@ -1,69 +1,49 @@
 name: CDK Deploy
-
 on:
-  push:
-    branches:
-      - main
+  push: { branches: [main] }
   workflow_dispatch:
-
 permissions:
   id-token: write
   contents: read
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Guard required secrets
-        env:
-          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+        shell: bash
         run: |
           set -e
           for v in AWS_ROLE_TO_ASSUME AWS_REGION; do
             [ -n "${!v}" ] || { echo "::error::missing secret $v"; exit 1; }
           done
+        env:
+          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          AWS_REGION:        ${{ secrets.AWS_REGION }}
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region:     ${{ secrets.AWS_REGION }}
+          audience: sts.amazonaws.com
+          output-env-credentials: true
 
-      - name: whoami
-        run: aws sts get-caller-identity
-
-      - name: Install CDK deps
-        run: |
-          set -e
-          if [ -f package-lock.json ]; then npm ci; fi
-          if [ -d infra ]; then cd infra && npm ci && cd - >/dev/null; fi
+      - name: Install deps
+        run: npm ci
 
       - name: CDK synth
-        run: |
-          set -e
-          CDK_DIR="."
-          [ -d infra ] && CDK_DIR="infra"
-          cd "$CDK_DIR"
-          npx cdk synth
+        run: npx cdk synth
 
-      - name: CDK bootstrap (idempotent)
-        run: |
-          set -e
-          CDK_DIR="."
-          [ -d infra ] && CDK_DIR="infra"
-          cd "$CDK_DIR"
-          npx cdk bootstrap || true
+      - name: CDK bootstrap
+        run: npx cdk bootstrap --context skipVersionCheck=true
 
       - name: CDK deploy
-        run: |
-          set -e
-          CDK_DIR="."
-          [ -d infra ] && CDK_DIR="infra"
-          cd "$CDK_DIR"
-          npx cdk deploy --require-approval never
+        run: npx cdk deploy --require-approval never
+
+      - name: WhoAmI
+        run: aws sts get-caller-identity
