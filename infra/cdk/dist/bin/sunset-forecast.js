@@ -9,11 +9,14 @@ const env = {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION ?? "us-east-1"
 };
-const stackProps = {
+const myDomainName = process.env.MY_DOMAIN_NAME ?? "example.com";
+new sunset_forecast_stack_1.SunsetForecastStack(app, "SunsetForecastStack", {
     env,
-    defaultModelId: process.env.MODEL_ID ?? "stability.stable-diffusion-xl-v1",
-    openWeatherApiKey: process.env.OPENWEATHER_API ?? "REPLACE_ME",
-    latitude: process.env.LAT ?? "35.468",
-    longitude: process.env.LON ?? "133.048"
-};
-new sunset_forecast_stack_1.SunsetForecastStack(app, "SunsetForecastStack", stackProps);
+    myDomainName,
+    frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
+    bedrockModelId: process.env.MODEL_ID ?? "amazon.titan-image-generator-v1",
+    bedrockRegion: process.env.BEDROCK_REGION ?? "us-east-1",
+    weatherApiKey: process.env.OPENWEATHER_API ?? "",
+    defaultLat: process.env.DEFAULT_LAT ?? "35.468",
+    defaultLon: process.env.DEFAULT_LON ?? "133.050"
+});

@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "assets:pull": "bash ../scripts/copy-ui-assets.sh",
+    "deploy:s3": "aws s3 sync dist s3://sunsetforecaststack-cardimagesbuckete37aba68-lzjm0gbq5ico --delete",
+    "invalidate": "aws cloudfront create-invalidation --distribution-id E1F0UDJZRMC56P --paths '/*'"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.0",

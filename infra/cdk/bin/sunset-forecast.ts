@@ -17,5 +17,9 @@ new SunsetForecastStack(app, "SunsetForecastStack", {
   myDomainName,
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
   bedrockModelId: process.env.MODEL_ID ?? "amazon.titan-image-generator-v1",
-  bedrockRegion: process.env.BEDROCK_REGION ?? "us-east-1"
+  bedrockRegion: process.env.BEDROCK_REGION ?? "us-east-1",
+  weatherApiKey: process.env.OPENWEATHER_API ?? "",
+  defaultLat: process.env.DEFAULT_LAT ?? "35.468",
+  defaultLon: process.env.DEFAULT_LON ?? "133.050",
+  cdnHost: process.env.CDN_HOST
 });

@@ -22,25 +22,28 @@ export interface SunsetForecastStackProps extends StackProps {
   readonly frontendOrigin?: string;
   readonly bedrockModelId?: string;
   readonly bedrockRegion?: string;
+  readonly weatherApiKey?: string;
+  readonly defaultLat?: string;
+  readonly defaultLon?: string;
+  readonly cdnHost?: string;
 }
 
 export class SunsetForecastStack extends Stack {
+  private readonly corsPrimaryOrigin: string;
+
   constructor(scope: Construct, id: string, props: SunsetForecastStackProps) {
     super(scope, id, props);
 
     const apexDomain = props.myDomainName;
     const wwwDomain = `www.${props.myDomainName}`;
     const canonicalHttpsOrigins = [`https://${apexDomain}`, `https://${wwwDomain}`];
-
-    const frontendOrigins = props.frontendOrigin
-      ?.split(",")
-      .map((origin) => origin.trim())
-      .filter((origin) => origin.length > 0);
-    const wildcardRequested = frontendOrigins?.some((origin) => origin === "*" || origin === apigateway.Cors.ALL_ORIGINS[0]) ?? false;
-    const resolvedAllowedOrigins = wildcardRequested
-      ? apigateway.Cors.ALL_ORIGINS
-      : Array.from(new Set([...(frontendOrigins ?? []), ...canonicalHttpsOrigins]));
-    const lambdaAllowedOriginsEnvValue = wildcardRequested ? "*" : resolvedAllowedOrigins.join(",");
+    const frontendOrigins =
+      props.frontendOrigin
+        ?.split(",")
+        .map((origin) => origin.trim())
+        .filter((origin) => origin.length > 0) ?? [];
+    const resolvedAllowedOrigins = Array.from(new Set([...canonicalHttpsOrigins, ...frontendOrigins]));
+    this.corsPrimaryOrigin = canonicalHttpsOrigins[0];
 
     const hostedZone = new route53.HostedZone(this, "SunsetHostedZone", {
       zoneName: apexDomain,
@@ -154,8 +157,8 @@ export class SunsetForecastStack extends Stack {
         MODEL_ID: props.bedrockModelId ?? "amazon.titan-image-generator-v1",
         BEDROCK_REGION: props.bedrockRegion ?? "us-east-1",
         OUTPUT_BUCKET: imageBucket.bucketName,
-        ALLOWED_ORIGINS: lambdaAllowedOriginsEnvValue,
-        CODE_VERSION: "2025-11-07-02"
+        CODE_VERSION: "2025-11-07-02",
+        CDN_HOST: props.cdnHost ?? `https://${apexDomain}`
       },
       layers: [pillowLayer]
     });
@@ -181,6 +184,33 @@ export class SunsetForecastStack extends Stack {
       })
     );
 
+    const sunsetIndexFn = new lambda.Function(this, "SunsetIndexFunction", {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      architecture: lambda.Architecture.X86_64,
+      handler: "lambda_function.lambda_handler",
+      code: lambda.Code.fromAsset(path.join(__dirname, "../../../services/lambda/sunset-score"), {
+        bundling: {
+          image: lambda.Runtime.PYTHON_3_12.bundlingImage,
+          command: [
+            "bash",
+            "-c",
+            [
+              "if [ -f requirements.txt ]; then pip install -r requirements.txt -t /asset-output; fi",
+              "cp -R . /asset-output"
+            ].join(" && ")
+          ]
+        }
+      }),
+      timeout: Duration.seconds(20),
+      memorySize: 512,
+      logRetention: logs.RetentionDays.ONE_MONTH,
+      environment: {
+        OPENWEATHER_API: props.weatherApiKey ?? "",
+        LAT: props.defaultLat ?? "35.468",
+        LON: props.defaultLon ?? "133.050"
+      }
+    });
+
     const api = new apigateway.RestApi(this, "SunsetApi", {
       restApiName: "Sunset Forecast",
       deployOptions: {
@@ -199,13 +229,19 @@ export class SunsetForecastStack extends Stack {
       },
       defaultCorsPreflightOptions: {
         allowOrigins: resolvedAllowedOrigins,
-        allowMethods: ["OPTIONS", "POST"],
-        allowHeaders: apigateway.Cors.DEFAULT_HEADERS
+        allowMethods: ["GET", "POST", "OPTIONS"],
+        allowHeaders: ["Content-Type", "Authorization"]
       }
     });
 
-    const generateCardResource = api.root.addResource("generate-card");
+    const apiV1 = api.root.addResource("v1");
+    const sunsetIndexResource = apiV1.addResource("sunset-index");
+    sunsetIndexResource.addMethod("GET", new apigateway.LambdaIntegration(sunsetIndexFn));
+    this.addCorsOptions(sunsetIndexResource);
+
+    const generateCardResource = apiV1.addResource("generate-card");
     generateCardResource.addMethod("POST", new apigateway.LambdaIntegration(generateCardFn));
+    this.addCorsOptions(generateCardResource);
 
     const oac = new cloudfront.CfnOriginAccessControl(this, "ImagesOAC", {
       originAccessControlConfig: {
@@ -214,6 +250,18 @@ export class SunsetForecastStack extends Stack {
         signingBehavior: "always",
         signingProtocol: "sigv4",
         description: "Origin access control for generated images"
+      }
+    });
+
+    const responseHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, "ImagesResponseHeaders", {
+      responseHeadersPolicyName: `${Stack.of(this).stackName}-images-rhp`,
+      comment: "CORS headers for generated card images",
+      corsBehavior: {
+        accessControlAllowCredentials: false,
+        accessControlAllowHeaders: ["*"],
+        accessControlAllowMethods: ["GET", "HEAD", "OPTIONS"],
+        accessControlAllowOrigins: [`https://${apexDomain}`, `https://${wwwDomain}`],
+        originOverride: true
       }
     });
 
@@ -237,7 +285,8 @@ export class SunsetForecastStack extends Stack {
           allowedMethods: ["GET", "HEAD", "OPTIONS"],
           cachedMethods: ["GET", "HEAD", "OPTIONS"],
           compress: true,
-          cachePolicyId
+          cachePolicyId,
+          responseHeadersPolicyId: responseHeadersPolicy.responseHeadersPolicyId
         },
         cacheBehaviors: [
           {
@@ -248,6 +297,7 @@ export class SunsetForecastStack extends Stack {
             cachedMethods: ["GET", "HEAD", "OPTIONS"],
             compress: true,
             cachePolicyId,
+            responseHeadersPolicyId: responseHeadersPolicy.responseHeadersPolicyId,
             minTtl: 0,
             defaultTtl: Duration.hours(1).toSeconds(),
             maxTtl: Duration.days(1).toSeconds()
@@ -306,7 +356,7 @@ export class SunsetForecastStack extends Stack {
       domainName: apexDomain
     });
 
-    new CfnOutput(this, "ApiUrl", { value: `${api.url}generate-card` });
+    new CfnOutput(this, "ApiUrl", { value: `${api.url}v1` });
     new CfnOutput(this, "ImagesBucketName", { value: imageBucket.bucketName });
     new CfnOutput(this, "CloudFrontDomain", { value: distribution.attrDomainName });
     new CfnOutput(this, "CloudFrontDistributionId", { value: distribution.attrId });
@@ -319,5 +369,44 @@ export class SunsetForecastStack extends Stack {
     new CfnOutput(this, "DnsRecordGuidance", {
       value: `A/AAAA aliases for ${props.myDomainName} and www CNAME are managed by CDK. Ensure registrar NS = ${props.myDomainName} HostedZoneNameServers.`
     });
+  }
+
+  private addCorsOptions(resource: apigateway.IResource): void {
+    if (resource.node.tryFindChild("OPTIONS")) {
+      return;
+    }
+    resource.addMethod(
+      "OPTIONS",
+      new apigateway.MockIntegration({
+        integrationResponses: [
+          {
+            statusCode: "200",
+            responseParameters: {
+              "method.response.header.Access-Control-Allow-Origin": `'${this.corsPrimaryOrigin}'`,
+              "method.response.header.Access-Control-Allow-Credentials": "'false'",
+              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,Authorization'",
+              "method.response.header.Access-Control-Allow-Methods": "'GET,POST,OPTIONS'"
+            }
+          }
+        ],
+        passthroughBehavior: apigateway.PassthroughBehavior.NEVER,
+        requestTemplates: {
+          "application/json": '{"statusCode": 200}'
+        }
+      }),
+      {
+        methodResponses: [
+          {
+            statusCode: "200",
+            responseParameters: {
+              "method.response.header.Access-Control-Allow-Origin": true,
+              "method.response.header.Access-Control-Allow-Credentials": true,
+              "method.response.header.Access-Control-Allow-Headers": true,
+              "method.response.header.Access-Control-Allow-Methods": true
+            }
+          }
+        ]
+      }
+    );
   }
 }
