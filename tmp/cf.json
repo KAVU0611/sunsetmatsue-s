@@ -1,0 +1,161 @@
+{
+    "ETag": "EZQ2OBKXCNK5S",
+    "DistributionConfig": {
+        "CallerReference": "511964ff-0771-999a-1b6f-543241d9c61b",
+        "Aliases": {
+            "Quantity": 2,
+            "Items": [
+                "www.matsuesunsetai.com",
+                "matsuesunsetai.com"
+            ]
+        },
+        "DefaultRootObject": "",
+        "Origins": {
+            "Quantity": 1,
+            "Items": [
+                {
+                    "Id": "ImagesS3Origin",
+                    "DomainName": "sunsetforecaststack-cardimagesbuckete37aba68-lzjm0gbq5ico.s3.us-east-1.amazonaws.com",
+                    "OriginPath": "",
+                    "CustomHeaders": {
+                        "Quantity": 0
+                    },
+                    "S3OriginConfig": {
+                        "OriginAccessIdentity": "",
+                        "OriginReadTimeout": 30
+                    },
+                    "ConnectionAttempts": 3,
+                    "ConnectionTimeout": 10,
+                    "OriginShield": {
+                        "Enabled": false
+                    },
+                    "OriginAccessControlId": "EWFY10LQQSQ3P"
+                }
+            ]
+        },
+        "OriginGroups": {
+            "Quantity": 0
+        },
+        "DefaultCacheBehavior": {
+            "TargetOriginId": "ImagesS3Origin",
+            "TrustedSigners": {
+                "Enabled": false,
+                "Quantity": 0
+            },
+            "TrustedKeyGroups": {
+                "Enabled": false,
+                "Quantity": 0
+            },
+            "ViewerProtocolPolicy": "redirect-to-https",
+            "AllowedMethods": {
+                "Quantity": 3,
+                "Items": [
+                    "HEAD",
+                    "GET",
+                    "OPTIONS"
+                ],
+                "CachedMethods": {
+                    "Quantity": 3,
+                    "Items": [
+                        "HEAD",
+                        "GET",
+                        "OPTIONS"
+                    ]
+                }
+            },
+            "SmoothStreaming": false,
+            "Compress": true,
+            "LambdaFunctionAssociations": {
+                "Quantity": 0
+            },
+            "FunctionAssociations": {
+                "Quantity": 0
+            },
+            "FieldLevelEncryptionId": "",
+            "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+            "ResponseHeadersPolicyId": "b0920551-35f2-4a3d-8df7-d3fea3f185e4",
+            "GrpcConfig": {
+                "Enabled": false
+            }
+        },
+        "CacheBehaviors": {
+            "Quantity": 1,
+            "Items": [
+                {
+                    "PathPattern": "images/*",
+                    "TargetOriginId": "ImagesS3Origin",
+                    "TrustedSigners": {
+                        "Enabled": false,
+                        "Quantity": 0
+                    },
+                    "TrustedKeyGroups": {
+                        "Enabled": false,
+                        "Quantity": 0
+                    },
+                    "ViewerProtocolPolicy": "redirect-to-https",
+                    "AllowedMethods": {
+                        "Quantity": 3,
+                        "Items": [
+                            "HEAD",
+                            "GET",
+                            "OPTIONS"
+                        ],
+                        "CachedMethods": {
+                            "Quantity": 3,
+                            "Items": [
+                                "HEAD",
+                                "GET",
+                                "OPTIONS"
+                            ]
+                        }
+                    },
+                    "SmoothStreaming": false,
+                    "Compress": true,
+                    "LambdaFunctionAssociations": {
+                        "Quantity": 0
+                    },
+                    "FunctionAssociations": {
+                        "Quantity": 0
+                    },
+                    "FieldLevelEncryptionId": "",
+                    "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+                    "ResponseHeadersPolicyId": "b0920551-35f2-4a3d-8df7-d3fea3f185e4",
+                    "GrpcConfig": {
+                        "Enabled": false
+                    }
+                }
+            ]
+        },
+        "CustomErrorResponses": {
+            "Quantity": 0
+        },
+        "Comment": "Sunset Forecast generated cards",
+        "Logging": {
+            "Enabled": false,
+            "IncludeCookies": false,
+            "Bucket": "",
+            "Prefix": ""
+        },
+        "PriceClass": "PriceClass_100",
+        "Enabled": true,
+        "ViewerCertificate": {
+            "CloudFrontDefaultCertificate": false,
+            "ACMCertificateArn": "arn:aws:acm:us-east-1:869935094495:certificate/73a8d637-55d1-4b04-a362-61b5402fd584",
+            "SSLSupportMethod": "sni-only",
+            "MinimumProtocolVersion": "TLSv1.2_2021",
+            "Certificate": "arn:aws:acm:us-east-1:869935094495:certificate/73a8d637-55d1-4b04-a362-61b5402fd584",
+            "CertificateSource": "acm"
+        },
+        "Restrictions": {
+            "GeoRestriction": {
+                "RestrictionType": "none",
+                "Quantity": 0
+            }
+        },
+        "WebACLId": "",
+        "HttpVersion": "http1.1",
+        "IsIPV6Enabled": true,
+        "ContinuousDeploymentPolicyId": "",
+        "Staging": false
+    }
+}

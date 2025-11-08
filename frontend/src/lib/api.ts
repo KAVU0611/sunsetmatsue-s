@@ -77,6 +77,7 @@ export interface GenerateCardResponse {
   cloudFrontUrl?: string;
   s3Url?: string;
   objectKey?: string;
+  sunsetJst?: string;
 }
 
 export async function getSunsetIndex(params: SunsetIndexParams) {

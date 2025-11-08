@@ -5,13 +5,16 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from io import BytesIO
 from typing import Any, Dict, Optional
 
 import boto3
+from astral import LocationInfo
+from astral.sun import sun
 from botocore.exceptions import BotoCoreError, ClientError
 from PIL import Image, ImageDraw, ImageFont
+from zoneinfo import ZoneInfo
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
@@ -22,6 +25,9 @@ OUTPUT_BUCKET = os.getenv("OUTPUT_BUCKET")
 CLOUDFRONT_DOMAIN = (os.getenv("CLOUDFRONT_DOMAIN") or "").strip()
 CDN_HOST = (os.getenv("CDN_HOST") or "").strip()
 CODE_VERSION = os.getenv("CODE_VERSION", "2025-11-07-02")
+JST = ZoneInfo("Asia/Tokyo")
+FIXED_LAT = 35.4690
+FIXED_LON = 133.0505
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "https://matsuesunsetai.com",
@@ -35,6 +41,12 @@ if not OUTPUT_BUCKET:
 
 bedrock = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
 s3 = boto3.client("s3")
+
+
+def compute_sunset_jst(target_date: date) -> datetime:
+    loc = LocationInfo(latitude=FIXED_LAT, longitude=FIXED_LON)
+    timings = sun(loc.observer, date=target_date, tzinfo=JST)
+    return timings["sunset"]
 
 
 class ValidationError(Exception):
@@ -78,6 +90,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     try:
         card_request = _parse_payload(event)
+        target_date = datetime.now(JST).date()
+        sunset = compute_sunset_jst(target_date)
+        sunset_str = sunset.strftime("%H:%M")
+        card_request.sunset_time = sunset_str
         _log_info("request.received", request_id, payload=card_request.summary())
 
         raw_image = _generate_image_from_bedrock(card_request)
@@ -92,6 +108,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "s3Url": s3_url,
             "objectKey": object_key,
             "codeVersion": CODE_VERSION,
+            "sunsetJst": sunset.strftime("%Y-%m-%d %H:%M %Z"),
         }
         if CLOUDFRONT_DOMAIN:
             response_payload["cloudFrontUrl"] = f"https://{CLOUDFRONT_DOMAIN.rstrip('/')}/{object_key}"
@@ -257,6 +274,13 @@ def _overlay_text(image_bytes: bytes, card: CardRequest) -> bytes:
             f"{card.location} — {card.conditions}",
             font=font_small,
             fill=(255, 200, 137, 235),
+        )
+        draw.text(
+            (width - 40, height - 40),
+            f"Sunset {card.sunset_time} JST",
+            font=font_small,
+            anchor="rd",
+            fill=(255, 255, 255, 230),
         )
 
         composed = Image.alpha_composite(base, overlay)

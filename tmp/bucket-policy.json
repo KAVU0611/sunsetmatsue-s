@@ -1,0 +1,13 @@
+{
+  "Version":"2012-10-17",
+  "Statement": [
+    {
+      "Sid":"AllowCloudFrontOACRead",
+      "Effect":"Allow",
+      "Principal":{"Service":"cloudfront.amazonaws.com"},
+      "Action":["s3:GetObject"],
+      "Resource":["arn:aws:s3:::sunsetforecaststack-cardimagesbuckete37aba68-lzjm0gbq5ico/*"],
+      "Condition":{"StringEquals":{"AWS:SourceArn":"arn:aws:cloudfront::869935094495:distribution/E1F0UDJZRMC56P"}}
+    }
+  ]
+}

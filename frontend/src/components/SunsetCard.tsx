@@ -21,13 +21,20 @@ import { Spinner } from "./ui/spinner";
 
 type DesignVariant = "simple" | "gradient";
 type TextScale = "md" | "lg";
+type GenerateResponse = {
+  imageUrl: string;
+  objectKey: string;
+  sunsetJst?: string;
+};
 
+const FIXED_COORDS = { lat: 35.4690, lon: 133.0505 };
+const FIXED_LOCATION_LABEL = "嫁ヶ島ビュー（35.4690, 133.0505）";
 const spots = [
   {
-    id: "shinjiko",
-    name: "松江 宍道湖サンセットスポット",
-    lat: 35.468,
-    lon: 133.05
+    id: "yomegashima",
+    name: FIXED_LOCATION_LABEL,
+    lat: FIXED_COORDS.lat,
+    lon: FIXED_COORDS.lon
   }
 ] as const;
 
@@ -62,6 +69,7 @@ export default function SunsetCard() {
   const [previewUrl, setPreviewUrl] = useState(DEFAULT_IMAGE);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [loadingImage, setLoadingImage] = useState(false);
+  const [resp, setResp] = useState<GenerateResponse | null>(null);
   const [toast, setToast] = useState<{ message: string; tone: "error" | "success" } | null>(null);
   const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null);
 
@@ -172,6 +180,11 @@ export default function SunsetCard() {
         throw new Error("画像URLがレスポンスに含まれていません");
       }
       setPreviewUrl(nextUrl);
+      setResp({
+        imageUrl: nextUrl,
+        objectKey: response.objectKey ?? deriveObjectKeyFromUrl(nextUrl) ?? "",
+        sunsetJst: response.sunsetJst
+      });
       setLastGeneratedAt(
         new Date().toLocaleTimeString("ja-JP", {
           hour: "2-digit",
@@ -307,6 +320,9 @@ export default function SunsetCard() {
                   </div>
                 </div>
               </div>
+              {resp?.sunsetJst && (
+                <div className="text-sm text-gray-300 mt-1">日の入り（JST）: {resp.sunsetJst}</div>
+              )}
 
               <div className="grid gap-4 rounded-3xl border border-white/5 bg-white/5 p-4 text-white/90 md:grid-cols-3">
                 {infoRow.map((info) => (
@@ -401,16 +417,9 @@ export default function SunsetCard() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-[0.4em] text-white/60">現在地 (緯度, 経度)</Label>
-              <div className="grid grid-cols-2 gap-3 text-sm text-white/80">
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                  LAT
-                  <p className="text-lg font-semibold">{coords.lat.toFixed(3)}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                  LON
-                  <p className="text-lg font-semibold">{coords.lon.toFixed(3)}</p>
-                </div>
+              <Label className="text-xs uppercase tracking-[0.4em] text-white/60">撮影地点</Label>
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-semibold text-white">
+                嫁ヶ島ビュー（35.4690, 133.0505）
               </div>
             </div>
 

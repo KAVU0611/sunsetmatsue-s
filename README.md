@@ -160,6 +160,8 @@ CDK が Hosted Zone / us-east-1 ACM 証明書 / matsuesunsetai.com 用の A・AA
 - 環境変数: `MODEL_ID`, `BEDROCK_REGION`, `OUTPUT_BUCKET`, `CLOUDFRONT_DOMAIN`, `ALLOWED_ORIGINS`。
 - CORS: `ALLOWED_ORIGINS` (カンマ区切り) に一致するオリジンのみ許可。未指定時 `*`。
 - ログ: CloudWatch Logs に JSON で `event`, `requestId`, `errorType` などを出力。
+- 座標は「嫁ヶ島ビュー（35.4690, 133.0505）」に固定し、クライアントから渡された lat/lon は Lambda 内で無視します。
+- Astral (Python) で JST の日の入りを算出し、画像右下へ `Sunset HH:MM JST` を描画、さらに API レスポンスへ `sunsetJst` を追加してフロントでも表示します。
 
 ### 正常系テスト
 

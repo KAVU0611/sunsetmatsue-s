@@ -1,0 +1,12 @@
+{
+  "DefaultRootObject": "",
+  "Origins": [
+    {
+      "Id": "ImagesS3Origin",
+      "DomainName": "sunsetforecaststack-cardimagesbuckete37aba68-lzjm0gbq5ico.s3.us-east-1.amazonaws.com",
+      "OriginPath": "",
+      "OriginAccessControlId": "EWFY10LQQSQ3P",
+      "OriginAccessIdentity": ""
+    }
+  ]
+}
